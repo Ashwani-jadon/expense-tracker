@@ -25,7 +25,6 @@ export const createExpense = async (req, res) => {
       select,
       note,
     });
-
     return res.status(201).json({
       message: "Expense created successfully and wallet updated.",
       expense: newExpense,
@@ -145,3 +144,73 @@ export const updateExpense = async (req, res) => {
     return res.status(500).json({ message: "Server error while updating expense." });
   }
 };
+
+export const searchExpenses = async (req, res) => {
+  try {
+    const { keyword } = req.query;
+
+    if (!keyword) {
+      return res.status(400).json({ message: "Search keyword is required." });
+    }
+
+    const expenses = await Expense.find({
+      user: req.user._id,
+      $or: [
+        { category: { $regex: keyword, $options: "i" } },
+        { note: { $regex: keyword, $options: "i" } },
+      ],
+    }).sort({ date: -1 });
+
+    res.status(200).json({ count: expenses.length, expenses });
+  } catch (error) {
+    console.error("Search Expense Error:", error);
+    res.status(500).json({ message: "Failed to search expenses." });
+  }
+};
+
+export const filterExpenses = async (req, res) => {
+  try {
+    const {
+      amount,
+      date,
+      startDate,
+      endDate,
+      select,
+      page = 1,
+      limit = 10,
+    } = req.query;
+
+    const query = { user: req.user._id };
+
+    if (amount) query.amount = Number(amount);
+    if (date) query.date = new Date(date);
+
+    if (startDate || endDate) {
+      query.date = {};
+      if (startDate) query.date.$gte = new Date(startDate);
+      if (endDate) query.date.$lte = new Date(endDate);
+    }
+
+    if (select) query.select = select;
+
+    const expenses = await Expense.find(query)
+      .sort({ date: -1 })
+      .skip((page - 1) * limit)
+      .limit(Number(limit));
+
+    const total = await Expense.countDocuments(query);
+
+    res.status(200).json({
+      total,
+      page: Number(page),
+      pages: Math.ceil(total / limit),
+      count: expenses.length,
+      expenses,
+    });
+  } catch (error) {
+    console.error("Filter Expense Error:", error);
+    res.status(500).json({ message: "Failed to filter expenses." });
+  }
+};
+
+
